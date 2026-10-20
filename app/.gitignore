@@ -1,0 +1,7 @@
+node_modules/
+dist/
+dev/.mock-state.json
+*.log
+.DS_Store
+.vercel
+.env*

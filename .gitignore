@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.DS_Store
+*.log
+
+# Personal: never commit these
+.clasp.json
+.clasprc.json
+.vercel/
+.env
+.env.*
+*.local
+app/dev/.mock-state*.json
+finance-os-20*.json

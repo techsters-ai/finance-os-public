@@ -70,6 +70,41 @@ test('resending the same id updates the row instead of duplicating it', () => {
   assert.equal(sheets.Transactions.data[1][4], -2000);
 });
 
+// A column of checkboxes reads FALSE in every empty row, down to the end of the sheet.
+const blankTxRow = () => { const r = Array(18).fill(''); r[15] = false; return r; };
+
+test('empty rows with an unticked checkbox are not records: new ones go right after the last record', () => {
+  const { post, sheets } = makeEnv();
+  post({ key: 'secret', action: 'sync', since: null, ops: [{ entity: 'transactions', record: tx({ id: 'a' }) }] });
+  sheets.Transactions.data.push(blankTxRow(), blankTxRow(), blankTxRow());
+  const res = post({ key: 'secret', action: 'sync', since: null, ops: [{ entity: 'transactions', record: tx({ id: 'b' }) }] });
+  assert.deepEqual(sheets.Transactions.data.map(r => r[0]), ['id', 'a', 'b', '', '']);
+  assert.deepEqual(res.changes.transactions.map(t => t.id), ['a', 'b']);
+  // A check-in appends on its own (no table read before it).
+  sheets.Locations.data.push(['', '', '', '', '', '', false, '', '', '']);
+  post({ key: 'secret', action: 'checkin', country: 'TH', date: '2026-10-18' });
+  assert.deepEqual(sheets.Locations.data.map(r => r[0]), ['id', 'loc_2026-10-18']);
+});
+
+test('the jobs remove the blank rows between records; rows with data but no id stay, then nothing more to do', () => {
+  const { ctx, post, sheets } = makeEnv();
+  const ops = ['a', 'b', 'c'].map(id => ({ entity: 'transactions', record: tx({ id }) }));
+  post({ key: 'secret', action: 'sync', since: null, ops });
+  const t = sheets.Transactions;
+  const typed = blankTxRow();
+  typed[10] = 'typed by hand';
+  t.data.splice(2, 0, blankTxRow(), blankTxRow(), typed, blankTxRow());
+  t.data.splice(7, 0, blankTxRow());
+  t.data.push(blankTxRow(), blankTxRow());
+  assert.deepEqual(t.data.map(r => r[0] || r[10]), ['id', 'a', '', '', 'typed by hand', '', 'b', '', 'c', '', '']);
+  ctx.backgroundJob();
+  assert.deepEqual(t.data.map(r => r[0] || r[10]), ['id', 'a', 'typed by hand', 'b', 'c', '', '']);
+  assert.equal(ctx.compactSheets_(Date.now() + 60000), 0);
+  ctx.onEditStamp({ range: { getSheet: () => t, getRow: () => 6, getNumRows: () => 2 } });
+  assert.deepEqual(t.data.slice(5).map(r => r[0]), ['', '']);
+  assert.equal(post({ key: 'secret', action: 'sync', since: null, ops: [] }).changes.transactions.length, 3);
+});
+
 test('last write wins: an older version does not overwrite a newer one', () => {
   const { post, sheets } = makeEnv();
   post({ key: 'secret', action: 'sync', since: null, ops: [{ entity: 'transactions', record: tx({ amount: -2000, updated_at: '2026-10-18T11:10:00.000Z' }) }] });

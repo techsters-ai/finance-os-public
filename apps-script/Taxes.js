@@ -343,6 +343,7 @@ function backgroundJob() {
     if (tr.getHandlerFunction() === 'backgroundJob' || tr.getHandlerFunction() === 'refreshTaxesJob') ScriptApp.deleteTrigger(tr);
   });
   withLock_(() => {
+    removeBlankRows_();
     const ledger = loadLedger_();
     runAutomations_(ledger);
     refreshTaxes_(ledger);

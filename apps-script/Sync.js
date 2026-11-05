@@ -94,7 +94,7 @@ function applyRecords_(entity, records, serverTs, touched, rates) {
     const i = Number(p);
     sh.getRange(i + 2, 1, 1, headers.length).setValues([rows[i]]);
   });
-  appendRows_(sh, rows.slice(originalCount));
+  appendRows_(sh, rows.slice(originalCount), originalCount + 2);
   return applied;
 }
 

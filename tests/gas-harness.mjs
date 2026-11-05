@@ -31,6 +31,7 @@ export class Sheet {
   isSheetHidden() { return false; }
   getCharts() { return []; }
   insertRowsAfter(_after, n) { this.maxRows += n; }
+  deleteRows(row, n) { this.data.splice(row - 1, n); this.maxRows -= n; }
   insertColumnsAfter() {}
   clearContents() { this.data = []; }
   setFrozenRows() {}

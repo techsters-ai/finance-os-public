@@ -7,12 +7,33 @@ function sheetFor_(entity) {
   return sh;
 }
 
+// The rows end at the last one with data: an empty row with a checkbox reads FALSE, so getLastRow() counts it, and
+// a column of checkboxes runs down every row the sheet has.
 function readTable_(sh) {
   const lastRow = sh.getLastRow();
   const lastCol = sh.getLastColumn();
   const headers = sh.getRange(1, 1, 1, lastCol).getValues()[0].map(String);
   const rows = lastRow > 1 ? sh.getRange(2, 1, lastRow - 1, lastCol).getValues() : [];
+  while (rows.length && isBlankRow_(rows[rows.length - 1])) rows.pop();
   return { headers, rows };
+}
+
+/** Nothing typed in: empty cells and unticked checkboxes. */
+function isBlankRow_(row) {
+  return row.every(v => v === '' || v === null || v === false);
+}
+
+/** The last row with data (1 for the header alone), looking up from getLastRow() past the blank rows. */
+function lastDataRow_(sh) {
+  const width = Math.max(sh.getLastColumn(), 1);
+  let end = sh.getLastRow();
+  while (end > 1) {
+    const from = Math.max(2, end - 499);
+    const block = sh.getRange(from, 1, end - from + 1, width).getValues();
+    for (let i = block.length - 1; i >= 0; i--) if (!isBlankRow_(block[i])) return from + i;
+    end = from - 1;
+  }
+  return end;
 }
 
 function colIndex_(headers) {
@@ -165,12 +186,57 @@ function readSettings_() {
   return settings;
 }
 
-function appendRows_(sh, rows) {
+// Writes after the last row with data (into the blank rows below it). start: that row + 1, when the caller has
+// just read the table.
+function appendRows_(sh, rows, start) {
   if (!rows.length) return;
-  const start = sh.getLastRow() + 1;
-  const need = start + rows.length - 1 - sh.getMaxRows();
+  const from = start || lastDataRow_(sh) + 1;
+  const need = from + rows.length - 1 - sh.getMaxRows();
   if (need > 0) sh.insertRowsAfter(sh.getMaxRows(), need + 200);
-  sh.getRange(start, 1, rows.length, rows[0].length).setValues(rows);
+  sh.getRange(from, 1, rows.length, rows[0].length).setValues(rows);
+}
+
+/**
+ * Deletes the blank rows between the records of the synced sheets, until the deadline (ms). Appends used to start
+ * after getLastRow(), which a column of checkboxes puts at the sheet's end: each one left the 200 rows it inserted
+ * empty above it, and a sync read every one of them. A sheet without such rows costs one read of its id column.
+ */
+function compactSheets_(deadline) {
+  let removed = 0;
+  Object.keys(SHEETS).forEach(entity => {
+    const sh = SpreadsheetApp.getActive().getSheetByName(SHEETS[entity]);
+    if (sh) removed += compactSheet_(sh, deadline);
+  });
+  if (removed) console.log('Blank rows removed: ' + removed);
+  return removed;
+}
+
+function compactSheet_(sh, deadline) {
+  const last = sh.getLastRow();
+  if (last < 3) return 0;
+  const width = sh.getLastColumn();
+  const idCol = sh.getRange(1, 1, 1, width).getValues()[0].map(String).indexOf('id');
+  if (idCol < 0) return 0;
+  const hasId = sh.getRange(2, idCol + 1, last - 1, 1).getValues().map(r => r[0] !== '' && r[0] !== null);
+  const end = hasId.lastIndexOf(true);
+  const firstGap = hasId.indexOf(false);
+  if (firstGap < 0 || firstGap > end) return 0;
+  // Runs of blank rows, bottom up so the row numbers above stay put; a row with data but no id stays.
+  const rows = sh.getRange(2, 1, end + 1, width).getValues();
+  let removed = 0;
+  let runEnd = -1;
+  for (let i = end; i >= -1; i--) {
+    if (i >= 0 && isBlankRow_(rows[i])) {
+      if (runEnd < 0) runEnd = i;
+      continue;
+    }
+    if (runEnd < 0) continue;
+    if (Date.now() > deadline) break;
+    sh.deleteRows(i + 3, runEnd - i);
+    removed += runEnd - i;
+    runEnd = -1;
+  }
+  return removed;
 }
 
 // Named ranges of the Calc sheet the PWA needs (runway): { burn: 4200, ... } in USD per month.

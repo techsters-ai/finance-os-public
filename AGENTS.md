@@ -162,6 +162,7 @@ Offer these after the basics work, one at a time.
 | `Location is off for this app` on Check in | iOS refuses location to home screen apps. Use the iPhone Shortcut from Settings → Tax residency. |
 | The app was deleted from the home screen | Local data goes with it, but everything synced is in the sheet: install again, paste URL and key, Settings → Reload all data. |
 | Something fails at night | Apps Script editor → Executions shows each run and its error. |
+| Sync says `The server timed out`; Transactions has thousands of empty rows between records | A version before this fix wrote new rows after the sheet's last row, and a column of checkboxes (an empty one reads FALSE) puts that at the very end, so every write left 200 empty rows behind. Update the script and the deployment; the next background job (a minute after a sync, or menu Finance OS → Update rates and gold price now) deletes the empty rows. |
 
 ## Security rules
 

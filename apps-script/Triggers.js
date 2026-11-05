@@ -6,6 +6,7 @@
 function dailyJob() {
   updateRatesHistory_();
   withLock_(() => {
+    removeBlankRows_();
     const ledger = loadLedger_();
     runAutomations_(ledger);
     refreshTaxes_(ledger);
@@ -18,6 +19,16 @@ function dailyJob() {
       console.warn('Residency not checked: ' + err);
     }
   });
+}
+
+// Before the jobs read the ledger: the blank rows older versions left between the records (Records.js), in at most
+// 2 minutes a run; the rest goes on the next one.
+function removeBlankRows_() {
+  try {
+    compactSheets_(Date.now() + 2 * 60 * 1000);
+  } catch (err) {
+    console.warn('Blank rows not removed: ' + err);
+  }
 }
 
 function updateRatesHistory_() {
@@ -149,7 +160,7 @@ function onEditStamp(e) {
   const now = new Date().toISOString();
 
   block.forEach((row, i) => {
-    if (row.every(v => v === '' || v === null)) return;
+    if (isBlankRow_(row)) return; // an empty row, or one whose checkbox was just unticked
     const r = first + i;
     if (!row[col.id]) sh.getRange(r, col.id + 1).setValue(newId_(entity, row, col));
     sh.getRange(r, col.updated_at + 1).setValue(now);
